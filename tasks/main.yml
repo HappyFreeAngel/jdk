@@ -1,0 +1,57 @@
+# 参数传入演示 3个参数 software_root_dir=?   jdk_foldername=? set_jdk_env=?   jdk_targz=? 3个显示传入
+    - set_fact: software_root_dir="/var/server"
+      when: software_root_dir is undefined
+
+    - stat: path={{software_root_dir}}
+      register: software_root_dir_path
+
+    #如果是文件但不是目录.
+    - name: "{{software_root_dir}}存在,但如果只是个普通文件不是目录,重命名为{{software_root_dir}}_old"
+      shell: mv {{software_root_dir}} {{software_root_dir}}_old_{{ 200000000 | random }}_{{ 200000000 | random }}
+      when: software_root_dir_path.stat.exists == True and software_root_dir_path.stat.isdir == false
+
+    #文件状态可能已经改变，重新更新状态.
+    - stat: path={{software_root_dir}}
+      register: software_root_dir_path
+
+    - name: "创建目{{software_root_dir}}目录,如果不存在的话."
+      file: path={{software_root_dir}}  state=directory mode=0755
+      when: software_root_dir_path.stat.exists is defined and software_root_dir_path.stat.exists == False
+
+    - set_fact: jdk_targz="jdk-8u131-linux-x64.tar.gz"
+      when: jdk_targz is undefined
+
+    - set_fact: jdk_foldername="jdk1.8"
+      when: jdk_foldername is undefined
+
+    - set_fact: set_jdk_env="yes"    #默认是设置jdk-env.sh
+      when: set_jdk_env is undefined
+
+    - name: create jdk/jre evirement
+      copy: src=files/{{jdk_targz}} dest={{software_root_dir}} owner=centos group=centos mode=0755
+
+    - stat: path={{software_root_dir}}/{{jdk_foldername}}
+      register: p
+
+    - name: delte old jdk dir if exist
+      file: path={{software_root_dir}}/{{jdk_foldername}}  state=absent
+ #     shell: rm -rf {{software_root_dir}}/{{jdk_foldername}}
+      when: p.stat.isdir is defined and p.stat.isdir
+
+    - name: "create the {{software_root_dir}}/{{jdk_foldername}} directory"
+      file: path={{software_root_dir}}/{{jdk_foldername}} owner=centos group=centos state=directory mode=0755
+
+    - name: "copy file {{appconfig['install_filename_rpm_tgz']}}"
+      copy: src=files/{{jdk_targz}}  dest={{software_root_dir}}/{{jdk_targz}}
+
+    - name: extract {{jdk_targz}}  #解压缩文件到指定目录，并且原先带有的目录名称不要了,使用新的目录tar -zxvf jre-9.0.4_linux-x64_bin.tar.gz  -C jre9 --strip-components=1
+      shell: cd {{software_root_dir}}/ ; tar -zxvf {{jdk_targz}}  -C {{jdk_foldername}} --strip-components=1; rm -rf {{jdk_targz}}; chown -R centos:centos {{jdk_foldername}};
+
+    - name: debug info
+      debug: msg={{set_jdk_env}}
+
+   #??可能会和系统jre 设置的冲突 to do
+    - name: "set_jdk_env={{ set_jdk_env }} 拷贝java envirement jdk-env.sh.j2 到 /etc/profile.d/jdk-env.sh"
+      template: src=templates/jdk-env.sh.j2  dest=/etc/profile.d/jdk-env.sh owner=root group=root mode=0644
+      when: set_jdk_env == "yes" or set_jdk_env == true
+
